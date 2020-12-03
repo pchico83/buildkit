@@ -19,8 +19,10 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/oauth"
 )
 
 type Client struct {
@@ -37,6 +39,21 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 	needDialer := true
 	needWithInsecure := true
+
+	oauthToken := &oauth2.Token{
+		AccessToken: "aSoQIEiHXhOtN1GOfYFjUHOJBd6OvJKe6SRCehMR",
+	}
+
+	creds := WithCredentials("buildkit.monday.okteto.net", "/Users/pablo/.okteto/.ca.crt", "", "")
+	opt, err := loadCredentials(creds)
+	if err != nil {
+		return nil, err
+	}
+	gopts = append(gopts, opt)
+	needWithInsecure = false
+
+	rpc := WithRPCCreds(oauth.NewOauthAccess(oauthToken))
+	gopts = append(gopts, grpc.WithPerRPCCredentials(rpc.creds))
 
 	var unary []grpc.UnaryClientInterceptor
 	var stream []grpc.StreamClientInterceptor
@@ -143,13 +160,21 @@ type withCredentials struct {
 	Key        string
 }
 
+type withRPCCreds struct {
+	creds credentials.PerRPCCredentials
+}
+
+func WithRPCCreds(c credentials.PerRPCCredentials) *withRPCCreds {
+	return &withRPCCreds{c}
+}
+
 // WithCredentials configures the TLS parameters of the client.
 // Arguments:
 // * serverName: specifies the name of the target server
 // * ca:				 specifies the filepath of the CA certificate to use for verification
 // * cert:			 specifies the filepath of the client certificate
 // * key:				 specifies the filepath of the client key
-func WithCredentials(serverName, ca, cert, key string) ClientOpt {
+func WithCredentials(serverName, ca, cert, key string) *withCredentials {
 	return &withCredentials{serverName, ca, cert, key}
 }
 
